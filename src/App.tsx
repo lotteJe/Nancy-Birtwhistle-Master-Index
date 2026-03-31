@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Book, Info, ExternalLink, Copy, Check, Sparkles, Filter, X, Leaf, Coins, CookingPot, Globe, Utensils, Wand2, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { masterIndex } from './data';
@@ -29,17 +29,47 @@ const BOOK_COLORS: Record<string, { bg: string, text: string, border: string, ri
 export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBooks, setSelectedBooks] = useState<string[]>([]);
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
+  const [activeSelectedBooks, setActiveSelectedBooks] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [showKey, setShowKey] = useState(false);
 
-  const filteredResults = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
+  // Clear results immediately when search query is emptied
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setActiveSearchQuery('');
+      setActiveSelectedBooks([]);
+    }
+  }, [searchQuery]);
+
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery.length > 0 && trimmedQuery.length < 2) {
+      return; // Minimum 2 characters
+    }
+
+    setIsSearching(true);
+    // Increased duration to make the loading state more perceptible
+    setTimeout(() => {
+      setActiveSearchQuery(trimmedQuery);
+      setActiveSelectedBooks([...selectedBooks]);
+      setIsSearching(false);
+    }, 800);
+  };
+
+  const filteredResults = useMemo(() => {
+    const query = activeSearchQuery.toLowerCase();
+    
+    if (!query && activeSelectedBooks.length === 0) return [];
+
     const results = masterIndex
       .filter(entry => {
-        const matchesBook = selectedBooks.length === 0 || selectedBooks.includes(entry.book);
+        const matchesBook = activeSelectedBooks.length === 0 || activeSelectedBooks.includes(entry.book);
         if (!matchesBook) return false;
         
-        if (!query) return selectedBooks.length > 0;
+        if (!query) return activeSelectedBooks.length > 0;
         
         const fullTitle = BOOK_MAP[entry.book] || entry.book;
         return entry.topic.toLowerCase().includes(query) || 
@@ -66,7 +96,7 @@ export default function App() {
 
       return aTopic.localeCompare(bTopic);
     });
-  }, [searchQuery, selectedBooks]);
+  }, [activeSearchQuery, activeSelectedBooks]);
 
   const toggleBookFilter = (bookCode: string) => {
     setSelectedBooks(prev => 
@@ -76,8 +106,28 @@ export default function App() {
     );
   };
 
+  const clearAll = () => {
+    setSearchQuery('');
+    setSelectedBooks([]);
+    setActiveSearchQuery('');
+    setActiveSelectedBooks([]);
+  };
+
   return (
     <div className="min-h-screen bg-[#F9F8F4] text-[#1A1A1A] font-sans selection:bg-[#E8F3ED] selection:text-[#2D5A43]">
+      {/* Top Progress Bar */}
+      <AnimatePresence>
+        {isSearching && (
+          <motion.div
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            className="fixed top-0 left-0 right-0 h-1 bg-[#2D5A43] z-50 origin-left"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Header Section */}
       <header className="max-w-4xl mx-auto px-6 pt-12 pb-8 text-center space-y-8">
         {/* Top Badge */}
@@ -108,31 +158,51 @@ export default function App() {
 
         {/* Search Bar */}
         <div className="max-w-2xl mx-auto pt-4">
-          <div className="relative group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-[#9CA3AF] group-focus-within:text-[#2D5A43] transition-colors" />
-            <input
-              type="text"
-              placeholder="Search for a recipe, cleaning tip..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white border border-[#E5E7EB] rounded-2xl py-5 pl-14 pr-14 text-lg font-medium focus:ring-4 focus:ring-[#2D5A43]/5 focus:border-[#2D5A43] outline-none transition-all placeholder:text-[#9CA3AF] search-shadow"
-            />
-            {searchQuery && (
-              <button 
-                onClick={() => setSearchQuery('')}
-                className="absolute right-5 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100 rounded-full text-[#9CA3AF] transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
-          </div>
+          <form onSubmit={handleSearch} className="relative group flex gap-3">
+            <div className="relative flex-grow">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-[#9CA3AF] group-focus-within:text-[#2D5A43] transition-colors" />
+              <input
+                type="text"
+                placeholder="Search for a recipe, cleaning tip..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-[#E5E7EB] rounded-2xl py-5 pl-14 pr-14 text-lg font-medium focus:ring-4 focus:ring-[#2D5A43]/5 focus:border-[#2D5A43] outline-none transition-all placeholder:text-[#9CA3AF] search-shadow"
+              />
+              {searchQuery && (
+                <button 
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100 rounded-full text-[#9CA3AF] transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={searchQuery.trim().length > 0 && searchQuery.trim().length < 2}
+              className="px-8 bg-[#2D5A43] text-white rounded-2xl font-bold text-lg hover:bg-[#1A1A1A] transition-all shadow-lg shadow-[#2D5A43]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSearching ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Sparkles className="w-5 h-5" />
+              )}
+              Search
+            </button>
+          </form>
+          {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
+            <p className="text-left mt-2 text-xs font-bold text-[#991B1B] ml-4">
+              Type at least 2 characters to search.
+            </p>
+          )}
         </div>
 
         {/* Book Filters */}
         <div className="space-y-6 pt-4">
           <div className="flex flex-wrap justify-center gap-4">
             <button
-              onClick={() => setSelectedBooks([])}
+              onClick={clearAll}
               className={`px-6 h-12 rounded-full text-sm font-bold transition-all duration-200 border ${
                 selectedBooks.length === 0 
                   ? 'bg-[#2D5A43] text-white border-[#2D5A43] shadow-lg shadow-[#2D5A43]/20' 
@@ -212,9 +282,26 @@ export default function App() {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-5xl mx-auto px-6 py-12">
+      <main className="max-w-5xl mx-auto px-6 pt-2 pb-12">
         <AnimatePresence mode="wait">
-          {!searchQuery && selectedBooks.length === 0 ? (
+          {isSearching ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center py-24 space-y-6"
+            >
+              <div className="relative">
+                <div className="w-16 h-16 border-4 border-[#E8F3ED] rounded-full" />
+                <div className="absolute top-0 left-0 w-16 h-16 border-4 border-transparent border-t-[#2D5A43] rounded-full animate-spin" />
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xl font-serif font-bold text-[#2D5A43] animate-pulse">Searching the Master Index</p>
+                <p className="text-sm text-[#6B7280] font-medium">Please wait a moment...</p>
+              </div>
+            </motion.div>
+          ) : !activeSearchQuery && activeSelectedBooks.length === 0 ? (
             <motion.div
               key="empty"
               initial={{ opacity: 0, y: 20 }}
@@ -249,9 +336,9 @@ export default function App() {
                   <span className="text-xs font-black text-[#9CA3AF] uppercase tracking-[0.2em]">
                     {filteredResults.length} Results
                   </span>
-                  {selectedBooks.length > 0 && (
+                  {activeSelectedBooks.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {selectedBooks.map(code => (
+                      {activeSelectedBooks.map(code => (
                         <div 
                           key={code}
                           className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${BOOK_COLORS[code].bg} ${BOOK_COLORS[code].text} border ${BOOK_COLORS[code].border}`}
